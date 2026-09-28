@@ -76,13 +76,13 @@ a confirmation-depth/finality policy. Callers must handle RPC errors and possibl
 reorganizations; these checks are not an independent cryptographic chain proof.
 
 `createRegistryReader` exposes `getJob`, `getSellerStats`, `getPaymentConfirmer`,
-and `getValidator`. `src/registryAbi.ts` is the read-only ABI subset extracted from
+and `getValidator`. `src/registryAbi.ts` includes read functions extracted from
 the existing Solidity compiler artifact for `contracts/src/ServiceProofRegistry.sol`,
-including the Job tuple and uint8 enum representation. Regenerate it when the
+including the Job tuple and uint8 enum representation, plus write signatures checked against Solidity for calldata preparation. Update it when the
 contract changes. Contract read errors (including missing jobs) propagate.
 
-Later integration must bind trusted job terms to buyer/seller/amount, establish a
-finality policy, and link payment authenticity to
+The planner below binds job terms to seller/amount and verifies the expected buyer.
+Live integration must establish a finality policy and submit prepared
 `ServiceProofRegistry.confirmPayment` through the authorized payment confirmer.
 The registry's consumed-reference protection will prevent on-chain reuse. Service
 validation and outcome recording remain separate integration steps. No token-payment
@@ -90,3 +90,93 @@ protocol or identity-registry integration is provided by this layer.
 
 All automated tests use mocked public-client boundaries or a local custom viem
 transport; none depend on Fuji RPC availability.
+
+## E2E orchestration (preparation only)
+
+`src/orchestration.ts` exports `E2EPlanner`. It connects the existing seller policy,
+registry job reads, native AVAX verifier, injected seller execution, and SLA validator.
+It is an in-memory library, separate from the existing mock HTTP demo routes.
+It does **not broadcast**, sign, send AVAX, load keys, or create a wallet client.
+Constructing a planner or preparing calldata performs no network calls.
+
+Public demo configuration (pass explicitly at runtime; no identities in business logic):
+
+```ts
+import { E2EPlanner, DEMO_PAYMENT_WEI } from './src/orchestration';
+import { sellers } from './src/service';
+
+const planner = new E2EPlanner({
+  registryAddress: '0x442EacAd079CcE0e3671ee0B2eb75c199f36e917',
+  buyer: '0x9764b345a014D7Cf08f223e7fF5453916ee15f9B',
+  paymentConfirmer: '0x9764b345a014D7Cf08f223e7fF5453916ee15f9B',
+  validator: '0x9764b345a014D7Cf08f223e7fF5453916ee15f9B',
+  sellerAddresses: { 'seller-a': '0x0342ed8eaC11a52C247C9428c450A7288b72f484' },
+  paymentAmountWei: DEMO_PAYMENT_WEI,
+}, 'Sydney', 1000, sellers);
+const createCall = planner.prepareCreateJob(); // PREPARED only
+```
+
+The configurable demo quote is **1,000,000,000,000 wei = 0.000001 native Fuji AVAX**,
+excluding gas. The exact same positive bigint is hashed into task terms and passed
+as `minimumAmountWei` to verification. Legacy `priceUsd` fixture values remain
+inputs to the existing seller ranking policy; they are not the on-chain payment
+quote or a conversion rate.
+
+| Stage | Evidence required / action |
+| --- | --- |
+| PLANNED | Policy selects seller; validate address mapping and task terms. `prepareCreateJob()` returns calldata without advancing state. |
+| JOB_CREATED | `observeJobCreated(reader, jobId)` reads Created job matching buyer, seller, taskHash, creation timestamp and empty payment/result fields. Supply actual jobId from the future createJob receipt/event, not a guess. |
+| PAYMENT_VERIFIED | `verifyPayment(client, transactionHash)` runs the existing verifier against the committed buyer, seller and minimum wei. A rejection stays JOB_CREATED and exposes no confirmation call. |
+| PAYMENT_CONFIRMED | After external submission, `observePaymentConfirmed(reader)` reads Paid with matching paymentRef. Preparing confirmation alone does not advance state. |
+| SERVICE_EXECUTED | `executeService(execute)` obtains a response and runs existing SLA validation against committed threshold. A thrown transport error leaves PAYMENT_CONFIRMED; it is not fabricated delivery evidence. |
+| OUTCOME_READY | `prepareOutcome()` hashes evidence and returns recordOutcome calldata. SLA failure maps to Failure, not a failed orchestration. |
+| FINALIZED | After external submission, `observeFinalized(reader)` reads matching terminal status, resultHash, paymentRef and completion timestamp, then seller stats. Read errors or mismatches do not advance state. |
+
+**PREPARED** means unsigned calldata, target registry, Fuji chain ID, required caller,
+function name/arguments, and zero contract-call value. It proves no transaction happened.
+**VERIFIED** means the payment verifier accepted included transfer evidence; it does
+not mean the registry recorded that payment. **ON-CHAIN CONFIRMED** here means the
+injected registry reader returned the matching Paid job. **FINALIZED** means the
+matching terminal job and seller statistics were read, not consensus-level finality.
+An explicit confirmation-depth/reorganization policy is still required for live use.
+
+Prepared functions use the actual Solidity signatures:
+`createJob(address,bytes32)`, `confirmPayment(uint256,bytes32)`, and
+`recordOutcome(uint256,uint8,bytes32)` (**jobId, outcome, resultHash**).
+Status values are Created=0, Paid=1, Success=2, Failure=3. `paymentRef` is the original
+verified transaction hash, not a derived identifier. Configured confirmer/validator
+addresses identify required callers; configuration does not grant on-chain authority.
+
+Task canonicalization is a versioned fixed-position JSON tuple encoded as UTF-8
+and hashed with keccak256: version, service type, exact city, seller ID, lowercase
+seller address, response-time threshold, native asset label, Fuji chain ID, and
+base-10 wei string. Object insertion order cannot affect it. City whitespace/case
+is preserved; bigint amounts never pass through floating point.
+
+Result canonicalization is another versioned fixed-position JSON tuple: version,
+HTTP status, **exact raw body string** (never parsed/reformatted for hashing), finite
+nonnegative response time, SLA result, validation scope, threshold, and ordered
+`[check ID, passed]` pairs. The snapshot retains the body, validation, canonical
+string and hash for audit. Success and missing-temperature responses hash differently.
+The executor must supply actual measured timing in real use; `callMockSeller`
+still supplies simulated 10 ms timing. Nonfinite timing is rejected as invalid evidence.
+
+The planner owns private state and returns cloned snapshots; callers cannot advance
+it by editing snapshots. Transitions reject wrong ordering and concurrent operations.
+It invokes verification itself so an unrelated caller-provided VERIFIED object cannot
+substitute different buyer/seller/amount terms. The injected payment client and reader
+are trusted I/O boundaries: bind the reader to the configured registry on Fuji using
+`createRegistryReader`. Mock readers establish only simulated evidence in tests.
+
+For the first real E2E run, separately implement an explicitly authorized submission
+adapter and durable storage of task terms, jobId, transfer hash, raw evidence and
+receipts. Check the deployed confirmer and validator roles against runtime config.
+Submit createJob as buyer and extract jobId from JobCreated; read back the job.
+Send the configured native AVAX quote to the selected seller, then verify its hash.
+Submit prepared confirmPayment as the authorized confirmer and read Paid. Execute
+the actual weather service with measured timing, persist exact evidence, and prepare
+recordOutcome. Submit it as the authorized validator, then read the terminal job
+and seller stats. Add receipt/finality, retry/recovery and payment-reference reuse
+handling; the contract enforces consumed-reference uniqueness. None of those writes
+are executed by this implementation. Existing SLA validation checks schema/timing,
+not factual accuracy or equality of delivered and requested city.

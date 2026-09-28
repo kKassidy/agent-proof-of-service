@@ -1,5 +1,15 @@
-// Read-only ABI extracted from the Solidity compiler artifact for
+// Read ABI and write preparation ABI matching
 // contracts/src/ServiceProofRegistry.sol. Regenerate when the contract changes.
+export const registryWriteAbi = [
+  { type: 'function', name: 'createJob', stateMutability: 'nonpayable',
+    inputs: [{ name: 'seller', type: 'address' }, { name: 'taskHash', type: 'bytes32' }],
+    outputs: [{ name: 'jobId', type: 'uint256' }] },
+  { type: 'function', name: 'confirmPayment', stateMutability: 'nonpayable',
+    inputs: [{ name: 'jobId', type: 'uint256' }, { name: 'paymentRef', type: 'bytes32' }], outputs: [] },
+  { type: 'function', name: 'recordOutcome', stateMutability: 'nonpayable',
+    inputs: [{ name: 'jobId', type: 'uint256' }, { name: 'outcome', type: 'uint8' }, { name: 'resultHash', type: 'bytes32' }], outputs: [] },
+] as const;
+
 export const registryAbi = [
   {
     "type": "function",
