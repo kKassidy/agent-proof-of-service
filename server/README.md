@@ -132,6 +132,38 @@ protocol or identity-registry integration is provided by this layer.
 All automated tests use mocked public-client boundaries or a local custom viem
 transport; none depend on Fuji RPC availability.
 
+### Payment evidence CLI
+
+From the repository root, pass all five public inputs explicitly:
+
+```sh
+npm --prefix server run --silent evidence:payment -- <rpcUrl> <transactionHash> <expectedBuyer> <expectedSeller> <minimumAmountWei>
+```
+
+For the already-existing Job #2 payment:
+
+```sh
+npm --prefix server run --silent evidence:payment -- https://api.avax-test.network/ext/bc/C/rpc 0x28521fa0c88172f6ee5d59a87efb853b2400495f3c59118c079764a6def38fc9 0x9764b345a014D7Cf08f223e7fF5453916ee15f9B 0x0342ed8eaC11a52C247C9428c450A7288b72f484 1000000000000
+```
+
+The CLI creates a read-only viem Fuji public client and reuses
+`verifyNativeAvaxPayment()`, including its RPC chain ID check (43113) before
+transaction lookup. The minimum is a positive decimal integer in wei. No
+environment configuration, registry address, wallet, keys, or keystore is needed
+or loaded. It never signs, broadcasts, or sends AVAX.
+
+Stdout contains only JSON fields `status`, `transactionHash`, `paymentRef`, and
+`checks`. Exit code is 0 for VERIFIED and 1 for REJECTED or errors. Invalid input
+or unavailable RPC evidence produces a generic stderr error and no JSON evidence;
+raw transport errors and RPC URLs are not printed. Use `--silent` to suppress npm's
+script banner when saving JSON.
+
+VERIFIED proves the specified native Fuji AVAX transfer according to the verifier
+checks and RPC trust assumptions above. It does **not prove service delivery**,
+bind the transfer to Job #2, or record/confirm payment in the registry. The command
+only reads the already-existing transfer. Automated CLI tests are offline and do
+not call the real Fuji RPC.
+
 ## E2E orchestration (preparation only)
 
 `src/orchestration.ts` exports `E2EPlanner`. It connects the existing seller policy,
