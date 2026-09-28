@@ -17,7 +17,7 @@ npm run typecheck
 - `GET /api/policy`: buyer requirements and default SLA threshold (1000 ms).
 - `POST /api/demo/success`: select seller and validate a normal response.
 - `POST /api/demo/failure`: select the same seller and validate a response missing temperatureC.
-- `GET /api/sellers/:id/weather?city=Sydney`: each mock seller's weather response. Seller A supports `&mode=failure`.
+- `GET /api/sellers/:id/weather?city=Sydney&scenario=success`: deterministic demo seller response. Seller A supports `scenario=failure`, returning HTTP 200 valid JSON without `temperatureC`. The legacy `mode=failure` parameter still works; `scenario` takes precedence. Invalid scenarios return HTTP 400.
 
 Demo POST bodies are optional JSON objects: `{"city":"Sydney","maxResponseTimeMs":1000}`. Invalid input returns HTTP 400. Completed demos return HTTP 200 with a domain `result` of `SUCCESS` or `FAILURE`; API transport success does not imply SLA success. Unknown routes return HTTP 404.
 
@@ -30,6 +30,47 @@ Buyer calls use an in-process mock transport shared with the seller HTTP handler
 The failure demo simulates the service-validation portion of a future paid-but-failed scenario. **No payment occurs in either demo.** `payment.status` is `NOT_IMPLEMENTED` and `payment.reference` is null, providing a place for a future payment adapter to attach a reference. `serviceCall.delivered` and the final SLA result are separate. The demo does not use blockchain or RPC; it has no wallet, payment, database, authentication, or persistence. Results are returned for future recording; nothing is recorded now.
 
 The API is local-only and uses no CORS headers; a later frontend can proxy `/api` to port 3001. Real transport deadlines, independently verified history, and durable result/payment correlation remain future integration work.
+
+## Real local HTTP evidence
+
+From the repository root, start the server in one terminal:
+
+```sh
+npm --prefix server start
+```
+
+In another terminal, generate one-shot SUCCESS-scenario evidence for the requested
+Job #1 parameters (seller-a, Tokyo, threshold 1000 ms):
+
+```sh
+npm --prefix server run --silent evidence:http -- http://127.0.0.1:3001 seller-a Tokyo success 1000
+```
+
+This executes exactly one GET, with no retries or redirect following. It prints
+public JSON containing `transport: HTTP`, `timing: MEASURED`, status, exact raw
+body string, responseTimeMs, SLA validation/checks, canonical result evidence and
+resultHash. JSON escapes in the output preserve the original body string.
+`serviceEvidence()` supplies canonicalization and hashing. The command does not
+read or bind Job #1, verify its terms/payment, finalize it, call RPC, load credentials,
+or write to the blockchain. Retain the output for subsequent authorized steps.
+The success scenario can still fail the SLA if the measured duration reaches 1000 ms.
+
+`executeSellerHttp(baseUrl, sellerId, city, scenario)` in `src/sellerHttp.ts` uses
+actual fetch and `response.text()` without parsing or reformatting the body.
+Node's monotonic `performance.now()` measures elapsed milliseconds immediately
+before fetch through full body consumption. Timing is neither simulated nor
+clamped, and includes request/response transport and body reading. Non-2xx and
+redirect status/body remain evidence; connection or body-read errors throw without
+fabricating evidence. No timeout is currently enforced; the SLA evaluates duration
+after completion. The base URL is supplied by the caller for local ephemeral tests
+or an already-running server.
+
+The seller's weather data remains **deterministic demo data**, not a live weather
+oracle. HTTP transport and elapsed timing are real; validation proves only the
+configured schema/status/timing checks, **not factual weather truth**. Existing
+`callMockSeller()` and `runDemo()` still use deterministic simulated 10 ms evidence.
+For planner integration, inject `(seller, city) => executeSellerHttp(baseUrl,
+seller.id, city, 'success')` into `executeService()` after its payment prerequisite.
 
 ## Read-only Avalanche Fuji layer
 

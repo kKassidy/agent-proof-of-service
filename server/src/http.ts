@@ -33,7 +33,9 @@ export function createApiServer() {
       if (!seller) return send(404, { error: 'Seller not found' });
       const city = url.searchParams.get('city') ?? 'Sydney';
       if (!city.trim()) return send(400, { error: 'city must be a non-empty string' });
-      const result = callMockSeller(seller, city, url.searchParams.get('mode') === 'failure' ? 'failure' : 'success');
+      const scenario = url.searchParams.get('scenario') ?? url.searchParams.get('mode') ?? 'success';
+      if (scenario !== 'success' && scenario !== 'failure') return send(400, { error: 'scenario must be success or failure' });
+      const result = callMockSeller(seller, city, scenario);
       response.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8' });
       return response.end(result.body);
     }
