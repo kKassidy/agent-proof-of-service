@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables / secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend build output
+dist/
+**/dist/
+
+# Foundry build/cache
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Foundry / wallet sensitive files
+contracts/keystore/
+contracts/keystores/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
