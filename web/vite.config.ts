@@ -4,4 +4,6 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // This public-only frontend does not need or load environment files.
+  envDir: false,
 })

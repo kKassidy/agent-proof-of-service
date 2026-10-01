@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { explorer, jobs, registry, seller, sellers } from './evidence'
 import { readSellerStats, snapshot, type Stats } from './fuji'
 import './App.css'
+import InteractiveDemo from './InteractiveDemo'
 
 const short = (value: string) => `${value.slice(0, 8)}…${value.slice(-6)}`
 function ExplorerLink({ value, kind = 'tx', label }: { value: string; kind?: 'tx' | 'address'; label: string }) {
@@ -38,6 +39,7 @@ function App() {
       <section className="hero"><div className="hero-copy"><span className="badge neutral"><span className="live-dot" /> Avalanche Fuji · Live MVP</span><h1>Proof-of-Service<br />for <span>Agent Commerce</span></h1><p className="subtitle">Bind agent reputation to verifiable economic interactions.</p><p className="hero-description">Verify money moved. Record whether the service met its requirements.</p><div className="hero-actions"><a className="primary-button" href="#evidence">Explore the evidence <span aria-hidden="true">↗</span></a><span className="contract-link">Registry <ExplorerLink value={registry} kind="address" label="Registry contract" /></span></div></div>
         <aside className="hero-thesis"><p className="eyebrow">2 REAL PAID JOBS</p><h2>Payment <span>≠</span><br />Successful Delivery.</h2><div className="thesis-row"><span>Payments verified</span><strong className="positive-text">2 / 2</strong></div><div className="thesis-row"><span>Successful outcomes</span><strong className="positive-text">1</strong></div><div className="thesis-row"><span>Failed outcomes</span><strong>1</strong></div><p>Same payment flow. Same HTTP status.<br /><strong>Different service outcomes.</strong></p></aside>
       </section>
+      <InteractiveDemo />
       <section className="section" id="selection"><div className="section-heading"><div><p className="eyebrow">01 / THE DECISION</p><h2>Policy before purchase.</h2></div><span className="badge neutral">Demo selection scenario</span></div>
         <div className="policy"><strong>BUYER POLICY</strong><span>Verified jobs <b>≥ 20</b></span><span>Success rate <b>≥ 90%</b></span><span>Maximum price <b>$0.02</b></span></div>
         <p className="scenario-note">Seller selection uses illustrative pre-purchase history. The Proof-of-Service records below are real Avalanche Fuji transactions.</p>

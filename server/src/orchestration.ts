@@ -1,10 +1,11 @@
-import { encodeFunctionData, keccak256, toHex, zeroAddress, zeroHash, type Address } from 'viem';
-import { FUJI_CHAIN_ID, normalizeAddress, type createRegistryReader } from './avalanche';
+import { encodeFunctionData, keccak256, toHex, zeroHash, type Address } from 'viem';
+import { FUJI_CHAIN_ID, type createRegistryReader } from './avalanche';
 import { registryWriteAbi } from './registryAbi';
 import { verifyNativeAvaxPayment, type PaymentClient, type PaymentResult } from './payment';
 import { selectSeller, validateSla, type Seller, type Policy, type ServiceResponse } from './service';
 
-export const DEMO_PAYMENT_WEI = 1_000_000_000_000n; // 0.000001 native AVAX
+import { hashTask, taskAddress as address, type WeatherTask } from './task';
+export { canonicalTask, hashTask, DEMO_PAYMENT_WEI, type WeatherTask } from './task';
 export enum RegistryStatus { Created, Paid, Success, Failure }
 export type Stage = 'PLANNED' | 'JOB_CREATED' | 'PAYMENT_VERIFIED' | 'PAYMENT_CONFIRMED' | 'SERVICE_EXECUTED' | 'OUTCOME_READY' | 'FINALIZED';
 export interface RuntimeConfig {
@@ -15,24 +16,6 @@ export interface RuntimeConfig {
   sellerAddresses: Readonly<Record<string, string>>;
   paymentAmountWei: bigint;
 }
-export interface WeatherTask {
-  serviceType: 'weather'; city: string; sellerId: string; sellerAddress: string;
-  maxResponseTimeMs: number; paymentAmountWei: bigint;
-}
-function address(value: string): Address {
-  const normalized = normalizeAddress(value);
-  if (normalized === zeroAddress) throw new Error('Address must be nonzero');
-  return normalized;
-}
-// Versioned fixed-position tuples avoid object-key ordering and bigint JSON ambiguity.
-export function canonicalTask(task: WeatherTask): string {
-  if (task.serviceType !== 'weather' || !task.city.trim() || !task.sellerId.trim()) throw new Error('Invalid weather task');
-  if (!Number.isFinite(task.maxResponseTimeMs) || task.maxResponseTimeMs <= 0) throw new Error('Invalid SLA threshold');
-  if (typeof task.paymentAmountWei !== 'bigint' || task.paymentAmountWei <= 0n) throw new Error('Invalid payment amount');
-  return JSON.stringify(['apos.weather.v1', task.serviceType, task.city, task.sellerId,
-    address(task.sellerAddress), task.maxResponseTimeMs, 'native-AVAX', FUJI_CHAIN_ID, task.paymentAmountWei.toString()]);
-}
-export const hashTask = (task: WeatherTask) => keccak256(toHex(canonicalTask(task)));
 export function serviceEvidence(response: ServiceResponse, maxResponseTimeMs: number) {
   if (!Number.isInteger(response.status) || typeof response.body !== 'string' || !Number.isFinite(response.responseTimeMs) || response.responseTimeMs < 0) throw new Error('Invalid service evidence');
   const validation = validateSla(response, maxResponseTimeMs);

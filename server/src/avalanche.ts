@@ -1,14 +1,10 @@
-import { createPublicClient, http, isAddress, zeroAddress, type Address, type PublicClient } from 'viem';
+import { createPublicClient, http, zeroAddress, type Address, type PublicClient } from 'viem';
 import { avalancheFuji } from 'viem/chains';
 import { registryAbi } from './registryAbi';
 
-export const FUJI_CHAIN_ID = 43113;
+import { FUJI_CHAIN_ID, normalizeAddress } from './task';
+export { FUJI_CHAIN_ID, normalizeAddress } from './task';
 export interface FujiConfig { rpcUrl: string; registryAddress: Address }
-
-export function normalizeAddress(value: string): Address {
-  if (!isAddress(value, { strict: false })) throw new Error('Invalid address');
-  return value.toLowerCase() as Address;
-}
 
 export function loadFujiConfig(env: NodeJS.ProcessEnv = process.env): FujiConfig {
   const rpcUrl = env.AVALANCHE_FUJI_RPC_URL;

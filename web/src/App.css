@@ -886,3 +886,21 @@ footer {
   .topbar nav { flex-wrap:wrap; }
   .trust-groups { grid-template-columns:1fr; gap:24px; }
 }
+
+/* Additive Phase 1 wallet panel. */
+.interactive-steps { list-style:none; padding:0; display:grid; gap:20px; }
+.interactive-steps > li { padding:22px; background:#121b26; border:1px solid #304051; border-radius:9px; min-width:0; }
+.interactive h3 { margin-bottom:14px; }
+.interactive p { margin-block:12px; }
+.interactive button, .interactive select { background:#202d3e; color:#dbe6f2; border:1px solid #40516a; border-radius:5px; padding:10px 14px; font:inherit; }
+.interactive button { cursor:pointer; }
+.interactive button:disabled { opacity:.5; cursor:not-allowed; }
+.interactive label { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.interactive-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-block:14px; }
+.interactive a { color:#85e8c9; text-decoration:underline; }
+.interactive-facts { display:grid; grid-template-columns:minmax(110px,180px) minmax(0,1fr); gap:10px; font-size:13px; margin-block:18px; }
+.interactive-facts dt { color:#a7b6c9; }
+.interactive-facts dd { margin:0; overflow-wrap:anywhere; }
+.interactive-result { margin-top:18px; padding-top:14px; border-top:1px solid #304051; overflow-wrap:anywhere; }
+.interactive-error { color:#ffb6a5; }
+@media(max-width:760px) { .interactive-facts { grid-template-columns:1fr; gap:6px; } .interactive-facts dd { margin-bottom:10px; } }
