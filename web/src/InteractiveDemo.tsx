@@ -1,18 +1,10 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react'
-import { isAddress, type Address, type Hash } from 'viem'
+import { type Address, type Hash } from 'viem'
 import { explorer, seller } from './evidence'
 import { decodeCreatedJob, discoverWallets, evaluatePolicy, fujiBalance, fujiClient, FUJI_CHAIN_ID, policy, submitCreateJob, switchToFuji, taskHash, walletError, walletState, type CreatedJob, type Wallet } from './wallet'
 
-const storageKey = 'pos.phase1.creation.v1'
-type Run = { buyer: Address; hash?: Hash; job?: CreatedJob }
-function readRun(): Run | undefined {
-  try {
-    const value = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
-    if (!value || !isAddress(value.buyer) || (value.hash !== undefined && !/^0x[\da-fA-F]{64}$/.test(value.hash))) return undefined
-    // Recheck the receipt after reload; never trust a cached job as on-chain proof.
-    return { buyer: value.buyer, ...(value.hash ? { hash: value.hash } : {}) }
-  } catch { return undefined }
-}
+import { readRun, saveRun, storageKey, validateJobForPayment, requestPayment, checkPayment, paymentBlocked, paymentMessage, type Run } from './payment'
+
 function InteractivePanel() {
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [selected, setSelected] = useState('')
@@ -21,12 +13,26 @@ function InteractivePanel() {
   const [chain, setChain] = useState<number>()
   const [balance, setBalance] = useState('—')
   const [evaluation, setEvaluation] = useState<ReturnType<typeof evaluatePolicy>>()
-  const [run, setRun] = useState<Run | undefined>(readRun)
+  const [run, setRun] = useState<Run | undefined>(() => readRun(localStorage))
+  const [jobReady, setJobReady] = useState(false)
+  const [paymentChecked, setPaymentChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const [message, setMessage] = useState('Connect a desktop wallet to begin. Historical evidence remains available below.')
   const [error, setError] = useState('')
   useEffect(() => discoverWallets(window, candidate => setWallets(current => current.some(w => w.provider === candidate.provider) ? current : [...current, candidate])), [])
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key !== storageKey && event.key !== null) return
+      setJobReady(false); setPaymentChecked(false)
+      try {
+        const saved = readRun(localStorage)
+        setRun(previous => saved && previous && previous.hash === saved.hash && previous.buyer.toLowerCase() === saved.buyer.toLowerCase() ? { ...saved, job: previous.job } : saved)
+      } catch { setError('Saved run cannot be read. Inspect wallet activity; payment is blocked.') }
+    }
+    window.addEventListener('storage', changed)
+    return () => window.removeEventListener('storage', changed)
+  }, [])
   useEffect(() => {
     if (!wallet) return
     let active = true
@@ -56,7 +62,7 @@ function InteractivePanel() {
     let active = true
     fujiBalance(account).then(value => { if (active) setBalance(value) }).catch(() => { if (active) setBalance('Unavailable') })
     return () => { active = false }
-  }, [account, chain, run?.job])
+  }, [account, chain, run?.job, run?.payment?.status])
   async function action(work: () => Promise<void>) {
     if (lock.current) return
     lock.current = true; setBusy(true); setError('')
@@ -65,8 +71,8 @@ function InteractivePanel() {
   }
   function remember(value: Run) {
     // Save before requesting a signature, preventing accidental resubmission after refresh.
-    setRun(value)
-    localStorage.setItem(storageKey, JSON.stringify({ buyer: value.buyer, hash: value.hash }))
+    const saved = saveRun(localStorage, value)
+    setRun(saved)
   }
   async function receipt(value: Run) {
     if (!value.hash) return
@@ -74,19 +80,20 @@ function InteractivePanel() {
     const client = fujiClient()
     if (await client.getChainId() !== FUJI_CHAIN_ID) throw new Error('Unexpected RPC network')
     const result = await client.waitForTransactionReceipt({ hash: value.hash, confirmations: 1, timeout: 120000,
-      onReplaced: replacement => { value = { buyer: value.buyer, hash: replacement.transaction.hash }; remember(value) },
+      onReplaced: replacement => { value = { ...value, hash: replacement.transaction.hash }; remember(value) },
     })
     if (result.status !== 'success') { setMessage('Creation transaction reverted. No job was confirmed; inspect the transaction.'); return }
     let job: CreatedJob
     try { job = decodeCreatedJob(result, value.buyer) }
     catch { setMessage('Receipt received, but no matching JobCreated event was verified. Inspect the transaction; do not submit another job.'); return }
-    setRun({ buyer: value.buyer, hash: job.transactionHash, job })
-    setMessage('Job created on Fuji. Phase 1 is complete; this job is unpaid.')
+    remember({ ...value, hash: job.transactionHash, job })
+    setJobReady(false)
+    setMessage('Creation receipt validated. Check the registry job before paying Seller A.')
   }
   const boundToOtherAccount = run && account?.toLowerCase() !== run.buyer.toLowerCase()
   return <section className="section interactive" id="try-fuji">
-    <div className="section-heading"><div><p className="eyebrow">TRY IT ON FUJI</p><h2>Create your own Proof-of-Service job.</h2></div><span className="badge neutral">Phase 1 · Job creation only</span></div>
-    <p className="section-intro">Your wallet creates a real job in the existing registry. No service payment is sent in this phase.</p>
+    <div className="section-heading"><div><p className="eyebrow">TRY IT ON FUJI</p><h2>Create your own Proof-of-Service job.</h2></div><span className="badge neutral">Phase 2 · Wallet-assisted payment</span></div>
+    <p className="section-intro">Create a job, then explicitly approve a native Fuji AVAX payment. Native payment and registry payment confirmation are separate steps.</p>
     <ol className="interactive-steps">
       <li><h3>1. Connect wallet</h3>
         {wallets.length ? <label>Desktop wallet <select value={wallet?.id ?? ''} disabled={busy} onChange={e => { setSelected(e.target.value); setAccount(undefined); setChain(undefined); setBalance('—') }}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label> : <p>No injected wallet detected. Install or enable MetaMask or Core, then reload. You can still explore the dashboard.</p>}
@@ -126,7 +133,42 @@ function InteractivePanel() {
           <p><strong>Run buyer:</strong> {run.buyer}</p>
           {boundToOtherAccount && <p role="alert">This run belongs to {run.buyer}. Changing wallets or accounts does not change its buyer.</p>}
           {run.hash ? <><p>Creation transaction: <a href={`${explorer}/tx/${run.hash}`} target="_blank" rel="noreferrer">{run.hash} ↗</a></p>{!run.job && <button disabled={busy} onClick={() => void action(() => receipt(run))}>Check creation receipt</button>}</> : <p>Check your wallet for the pending request or transaction. Automatic resubmission is blocked.</p>}
-          {run.job && <dl className="interactive-facts"><dt>Actual Job ID</dt><dd>{run.job.jobId}</dd><dt>Buyer</dt><dd>{run.job.buyer}</dd><dt>Seller</dt><dd>{run.job.seller}</dd><dt>taskHash</dt><dd>{run.job.taskHash}</dd><dt>Transaction status</dt><dd>Success · matching JobCreated event confirmed</dd><dt>Registry job state at creation</dt><dd>Created · unpaid</dd></dl>}
+          {run.job && <dl className="interactive-facts"><dt>Actual Job ID</dt><dd>{run.job.jobId}</dd><dt>Buyer</dt><dd>{run.job.buyer}</dd><dt>Seller</dt><dd>{run.job.seller}</dd><dt>taskHash</dt><dd>{run.job.taskHash}</dd><dt>Transaction status</dt><dd>Success · matching JobCreated event confirmed</dd><dt>Registry job state at creation</dt><dd>Created · no registry payment confirmation</dd></dl>}
+        </div>}
+      </li>
+      <li><h3>4. Pay seller</h3><p className="eyebrow">NATIVE FUJI AVAX TRANSFER</p>
+        <p>Send exactly <strong>0.000001 Fuji AVAX (1,000,000,000,000 wei)</strong>, plus wallet gas, directly to Seller A. No contract calldata.</p>
+        <dl className="interactive-facts"><dt>Original buyer / From</dt><dd>{run?.buyer ?? 'Create or recover a job first'}</dd><dt>To / Seller A</dt><dd>{seller}</dd><dt>Network</dt><dd>Avalanche Fuji · 43113</dd><dt>Registry status</dt><dd>{jobReady ? 'Created · unpaid in registry (last checked)' : 'Not checked for payment — validate the saved job first'}</dd></dl>
+        {boundToOtherAccount && <p role="alert">Select the original buyer wallet {run?.buyer} to pay. This run will not be rebound to another account.</p>}
+        <div className="interactive-actions">
+          <button disabled={busy || !run?.job} onClick={() => void action(async () => {
+            setJobReady(false)
+            await validateJobForPayment(run!)
+            setJobReady(true)
+            setMessage('Registry read confirms the original Created job and approved terms. Native payment is separate from registry confirmation.')
+          })}>Check registry job before payment</button>
+          <button disabled={busy || !wallet || !jobReady || paymentBlocked(run, account, chain)} onClick={() => void action(async () => {
+            setPaymentChecked(false)
+            setMessage('Check the exact recipient and 0.000001 AVAX value in your wallet. Approve only if correct.')
+            let latest = run!
+            const update = (value: Run) => { latest = value; setRun(value) }
+            await requestPayment(wallet!.provider, latest, localStorage, update)
+            setMessage('Native payment submitted. Waiting for receipt; never retry a payment because of a timeout.')
+            const confirmed = await checkPayment(latest, localStorage, update)
+            setPaymentChecked(confirmed.payment?.status === 'confirmed')
+            setMessage(paymentMessage(confirmed.payment, true))
+          })}>Pay Seller · 0.000001 Fuji AVAX</button>
+        </div>
+        <p role="status">{paymentMessage(run?.payment, paymentChecked)}</p>
+        {run?.payment && <div className="interactive-result">
+          <dl className="interactive-facts"><dt>Payment amount</dt><dd>0.000001 Fuji AVAX · 1,000,000,000,000 wei</dd><dt>From (expected)</dt><dd>{run.buyer}</dd><dt>To (expected)</dt><dd>{seller}</dd><dt>Native receipt status</dt><dd>{paymentChecked ? 'Success · exact native transfer confirmed' : `${run.payment.status} · use receipt check for current evidence`}</dd></dl>
+          {run.payment.hash && <><p>Payment transaction: <a href={`${explorer}/tx/${run.payment.hash}`} target="_blank" rel="noreferrer">{run.payment.hash} ↗</a></p><button disabled={busy || !run.job} onClick={() => void action(async () => {
+            setPaymentChecked(false)
+            const confirmed = await checkPayment(run, localStorage, setRun)
+            setPaymentChecked(confirmed.payment?.status === 'confirmed')
+            setMessage(paymentMessage(confirmed.payment, true))
+          })}>Check saved payment receipt</button></>}
+          <p>No registry payment confirmation has been submitted by this flow. Awaiting Proof-of-Service payment verification.</p>
         </div>}
       </li>
     </ol>
