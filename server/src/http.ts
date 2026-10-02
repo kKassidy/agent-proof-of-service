@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { callMockSeller, defaultMaxResponseTimeMs, evaluateSeller, policy, runDemo, sellers } from './service';
+import { handlePhase3, phase3Handler } from './phase3Http';
 
 async function readOptions(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -18,13 +19,17 @@ async function readOptions(request: IncomingMessage) {
   return { city, maxResponseTimeMs };
 }
 
-export function createApiServer() {
+export function createApiServer(phase3 = phase3Handler) {
   return createServer(async (request, response) => {
     const send = (status: number, body: unknown) => {
       response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify(body));
     };
     const url = new URL(request.url ?? '/', 'http://localhost');
+    if (request.method === 'POST') {
+      const phase3Route = /^\/api\/phase3\/(verify|prepare|refresh)$/.exec(url.pathname);
+      if (phase3Route) return handlePhase3(request, response, phase3Route[1] as 'verify' | 'prepare' | 'refresh', phase3);
+    }
     if (request.method === 'GET' && url.pathname === '/api/sellers') return send(200, sellers.map(seller => evaluateSeller(seller)));
     if (request.method === 'GET' && url.pathname === '/api/policy') return send(200, { ...policy, maxResponseTimeMs: defaultMaxResponseTimeMs });
     const match = /^\/api\/sellers\/([^/]+)\/weather$/.exec(url.pathname);

@@ -4,6 +4,7 @@ import { explorer, seller } from './evidence'
 import { decodeCreatedJob, discoverWallets, evaluatePolicy, fujiBalance, fujiClient, FUJI_CHAIN_ID, policy, submitCreateJob, switchToFuji, taskHash, walletError, walletState, type CreatedJob, type Wallet } from './wallet'
 
 import { readRun, saveRun, storageKey, validateJobForPayment, requestPayment, checkPayment, paymentBlocked, paymentMessage, type Run } from './payment'
+import Phase3Panel from './Phase3Panel'
 
 function InteractivePanel() {
   const [wallets, setWallets] = useState<Wallet[]>([])
@@ -16,6 +17,7 @@ function InteractivePanel() {
   const [run, setRun] = useState<Run | undefined>(() => readRun(localStorage))
   const [jobReady, setJobReady] = useState(false)
   const [paymentChecked, setPaymentChecked] = useState(false)
+  const [phase3State, setPhase3State] = useState<'Created' | 'Paid'>()
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const [message, setMessage] = useState('Connect a desktop wallet to begin. Historical evidence remains available below.')
@@ -92,7 +94,7 @@ function InteractivePanel() {
   }
   const boundToOtherAccount = run && account?.toLowerCase() !== run.buyer.toLowerCase()
   return <section className="section interactive" id="try-fuji">
-    <div className="section-heading"><div><p className="eyebrow">TRY IT ON FUJI</p><h2>Create your own Proof-of-Service job.</h2></div><span className="badge neutral">Phase 2 · Wallet-assisted payment</span></div>
+    <div className="section-heading"><div><p className="eyebrow">TRY IT ON FUJI</p><h2>Create your own Proof-of-Service job.</h2></div><span className="badge neutral">Phase 3 · Verify &amp; confirm payment</span></div>
     <p className="section-intro">Create a job, then explicitly approve a native Fuji AVAX payment. Native payment and registry payment confirmation are separate steps.</p>
     <ol className="interactive-steps">
       <li><h3>1. Connect wallet</h3>
@@ -138,7 +140,7 @@ function InteractivePanel() {
       </li>
       <li><h3>4. Pay seller</h3><p className="eyebrow">NATIVE FUJI AVAX TRANSFER</p>
         <p>Send exactly <strong>0.000001 Fuji AVAX (1,000,000,000,000 wei)</strong>, plus wallet gas, directly to Seller A. No contract calldata.</p>
-        <dl className="interactive-facts"><dt>Original buyer / From</dt><dd>{run?.buyer ?? 'Create or recover a job first'}</dd><dt>To / Seller A</dt><dd>{seller}</dd><dt>Network</dt><dd>Avalanche Fuji · 43113</dd><dt>Registry status</dt><dd>{jobReady ? 'Created · unpaid in registry (last checked)' : 'Not checked for payment — validate the saved job first'}</dd></dl>
+        <dl className="interactive-facts"><dt>Original buyer / From</dt><dd>{run?.buyer ?? 'Create or recover a job first'}</dd><dt>To / Seller A</dt><dd>{seller}</dd><dt>Network</dt><dd>Avalanche Fuji · 43113</dd><dt>Pre-payment registry check</dt><dd>{run?.job?.jobId === '3' && phase3State === 'Paid' ? 'Paid · last backend check; see step 6' : jobReady ? 'Created · unpaid in registry (last checked)' : 'Not checked for payment — validate the saved job first'}</dd></dl>
         {boundToOtherAccount && <p role="alert">Select the original buyer wallet {run?.buyer} to pay. This run will not be rebound to another account.</p>}
         <div className="interactive-actions">
           <button disabled={busy || !run?.job} onClick={() => void action(async () => {
@@ -159,7 +161,7 @@ function InteractivePanel() {
             setMessage(paymentMessage(confirmed.payment, true))
           })}>Pay Seller · 0.000001 Fuji AVAX</button>
         </div>
-        <p role="status">{paymentMessage(run?.payment, paymentChecked)}</p>
+        <p role="status">{run?.job?.jobId === '3' && phase3State === 'Paid' ? 'Job #3 is Paid in the registry (last backend check). Do not send another payment.' : paymentMessage(run?.payment, paymentChecked)}</p>
         {run?.payment && <div className="interactive-result">
           <dl className="interactive-facts"><dt>Payment amount</dt><dd>0.000001 Fuji AVAX · 1,000,000,000,000 wei</dd><dt>From (expected)</dt><dd>{run.buyer}</dd><dt>To (expected)</dt><dd>{seller}</dd><dt>Native receipt status</dt><dd>{paymentChecked ? 'Success · exact native transfer confirmed' : `${run.payment.status} · use receipt check for current evidence`}</dd></dl>
           {run.payment.hash && <><p>Payment transaction: <a href={`${explorer}/tx/${run.payment.hash}`} target="_blank" rel="noreferrer">{run.payment.hash} ↗</a></p><button disabled={busy || !run.job} onClick={() => void action(async () => {
@@ -168,9 +170,10 @@ function InteractivePanel() {
             setPaymentChecked(confirmed.payment?.status === 'confirmed')
             setMessage(paymentMessage(confirmed.payment, true))
           })}>Check saved payment receipt</button></>}
-          <p>No registry payment confirmation has been submitted by this flow. Awaiting Proof-of-Service payment verification.</p>
+          <p>The native transfer itself does not change registry status. Steps 5 and 6 show backend verification and the latest registry read.</p>
         </div>}
       </li>
+      <Phase3Panel onRegistryState={setPhase3State} />
     </ol>
     <p role="status" aria-live="polite">{busy ? 'Working… ' : ''}{message}</p>{error && <p className="interactive-error" role="alert">{error}</p>}
   </section>

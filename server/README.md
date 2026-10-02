@@ -11,6 +11,127 @@ npm run typecheck
 
 `npm start` runs without watch mode. The API listens on `127.0.0.1:3001`; the mock API does not initialize the optional Fuji layer.
 
+## Phase 3: Job #3 payment verification and operator confirmation
+
+Phase 3 adds only read-only endpoints: `POST /api/phase3/verify`,
+`POST /api/phase3/prepare`, and `POST /api/phase3/refresh`. JSON input is:
+
+```json
+{"jobId":"3","paymentTransactionHash":"0xfdbaf0372ba3b87e3d0ba77d25adac2af64c09c2d933f4584caecb1f94a143ca"}
+```
+
+An optional `confirmationTransactionHash` is accepted for receipt recovery. Other
+fields are rejected, including browser-supplied buyer, seller, amount or signing
+credentials. Only this approved Job #3 payment is supported. The fixed public
+Fuji RPC and registry require no environment configuration. Client initialization
+is lazy, on Phase 3 requests; existing mock routes retain their behavior.
+
+The server checks Fuji 43113 and reads the registry job, paymentConfirmer and
+sellerStats at one block. It checks the approved buyer, seller, canonical Tokyo
+task hash, Created/Paid state, empty resultHash and completion time. It passes
+the **registry's** buyer/seller and shared canonical minimum to the unchanged
+`verifyNativeAvaxPayment`. Its six checks include both RPC/transaction chain ID,
+requested transaction/receipt hashes, mined block agreement, receipt success,
+sender, recipient, and value **at least** 1,000,000,000,000 wei. Captured evidence
+is the same evidence consumed by that verifier. Phase 3 does not impose the
+Phase 2 browser's exact-value/no-calldata check on this existing verifier.
+
+For a verified Created job, a zero-value `eth_call` simulation from the on-chain
+paymentConfirmer checks the real contract's authorization, state and private
+consumed-payment-reference mapping. A used reference, revert or RPC failure
+blocks readiness. This is not a broadcast or a signer. `prepare` repeats all
+reads and verification, then returns public unsigned calldata and an operator
+command. `verify` and `refresh` return no operator command. There is no send API,
+wallet client, child process, password input, account lookup or key-loading code.
+Errors do not echo transport details or request bodies. Responses are not cached.
+
+### Manual acceptance (only the operator sends)
+
+1. Start `npm --prefix server start` and `npm --prefix web run dev` in separate
+   terminals from the repository root. Use the same browser origin/profile as
+   Phase 2. Vite proxies `/api/phase3` to the loopback server. Production hosting
+   would require a separately configured same-origin reverse proxy; it is not
+   part of this local acceptance flow.
+2. Do **not** create another job or click Pay Seller. Job #3 already has one
+   successful native payment. Use step 5, **Verify payment**. Expect VERIFIED,
+   6/6 checks, the specified buyer/seller and 1,000,000,000,000 actual wei,
+   registry Created, zero paymentRef/resultHash, and readiness. Verification
+   alone must not create a transaction. Record current seller counters (expected
+   2 paid, 1 successful, 1 failed if there has been no other activity).
+3. Use step 6, **Confirm payment on Fuji · prepare operator step**. It repeats
+   preflight and displays public instructions. It **does not send**. A browser
+   handoff marker prevents this button being offered again after refresh or an
+   uncertain attempt. It is not an on-chain lock or proof of submission.
+4. Immediately before authorization, run this read-only terminal preflight:
+
+   ```sh
+   npm --prefix server run --silent phase3:prepare
+   ```
+
+   Require exit 0, `confirmationReady: true`, `registryStatus: "Created"`,
+   VERIFIED 6/6, zero current paymentRef/resultHash, the exact approved native
+   payment hash, target `0x442EacAd079CcE0e3671ee0B2eb75c199f36e917`, chain 43113,
+   and `prepared.value: "0"`. Confirm the returned on-chain paymentConfirmer
+   equals the **public address of your existing encrypted Foundry account**.
+   Confirm no pending, successful or uncertain confirmation attempt already
+   exists in your terminal/wallet activity. A Created read alone cannot rule
+   out a pending transaction. If there is uncertainty, stop and recover it.
+5. Only when you choose to authorize, copy the freshly returned `prepared.command`
+   into your own terminal and replace `YOUR_EXISTING_ENCRYPTED_ACCOUNT` with your
+   existing encrypted account alias. The command is `cast send` with
+   `confirmPayment(uint256,bytes32)`, job 3, the original native-payment hash as
+   paymentRef, the fixed registry/RPC/chain, explicit required `--from`, zero
+   value, and `--async` to return the confirmation hash promptly. The confirmer
+   pays gas; this sends **no new buyer payment**.
+
+   Keep Foundry's hidden local keystore-password prompt. Do not use private-key,
+   password, password-file, mnemonic or unlocked-RPC flags. Do not enter secrets
+   in the browser/API, command arguments, environment files or logs. Do not run
+   this in a terminal configured to supply a password or raw key automatically.
+   Do not export/decrypt/copy the account into the application. If the existing
+   encrypted account cannot be used with its normal password prompt, stop.
+   The application intentionally does not inspect or provision that account.
+6. Save the public confirmation transaction hash immediately. Paste it into step
+   6 and click **Refresh confirmation receipt & registry state**. Never repeat
+   the send command because of a timeout, missing hash or still-Created read.
+7. Expect Paid, paymentRef equal to the original payment hash, zero resultHash,
+   a successful confirmation receipt/Snowtrace link, and **Created → Paid**.
+   The backend validates the confirmation transaction's chain, hashes/block,
+   zero value, registry destination, exact calldata, authorized sender and
+   matching `PaymentConfirmed` event. It reads the registry before/at that
+   receipt block and latest state, plus seller counters. Expect paidJobs +1
+   (normally 3), successfulJobs unchanged (1), failedJobs unchanged (1).
+   Stop here; no seller call, SLA validation or outcome follows.
+
+### Recovery and limitations
+
+Verification is not persisted as authority: every API request reruns public reads
+and verification. Reload and click Verify or Refresh. Confirmation hashes and the
+operator-handoff marker persist separately from the Phase 1/2 saved run; cached
+data cannot declare Paid. A known confirmation hash while still Created blocks
+preparation. If already Paid, the server never prepares/simulates another write.
+
+Recent receipt recovery scans at most the last 8,192 blocks, in four bounded
+2,048-block log queries. For older confirmations, paste the public hash. If RPC
+history/logs/receipt lookup fails, the UI distinguishes a Paid registry read from
+fully verified transition evidence, retains the hash, and asks for a read retry.
+No API, CLI preflight or browser action automatically broadcasts or retries.
+Two button clicks cannot submit two transactions; the actual terminal command
+remains the operator's responsibility. Local storage is not a global transaction
+ledger. Clearing it, changing origins or opening other operator terminals does
+not establish that resubmission is safe. Never clear it as a retry mechanism.
+
+The contract enforces unique paymentRef and Created → Paid atomically; preflight
+cannot reserve a reference or eliminate a race before manual signing. A repeat
+manual transaction would revert but could still waste gas, so do not resend.
+The existing verifier trusts RPC inclusion data without adding a new finality
+policy. Readbacks are snapshots, not irrevocable guarantees. Confirmation-block
+counters are aggregate: unrelated activity in the same block can make the delta
+larger; the UI reports that instead of attributing service outcomes to this job.
+If roles change within a confirmation block, strict sender/readback verification
+can be unavailable and requires manual inspection. No contract changes, role
+changes, historical-evidence regeneration or canonical-hash changes are needed.
+
 ## API
 
 - `GET /api/sellers`: seller metrics, fractional success rates, eligibility, and rejection reasons.

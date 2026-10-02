@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "evidence:http": "tsx src/httpEvidence.ts",
     "evidence:payment": "tsx src/paymentEvidence.ts",
+    "phase3:prepare": "tsx src/phase3Prepare.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -124,3 +124,41 @@ local protection. Lost storage requires manual reconciliation, not recreating or
 repaying Job #3. Web Locks and writable local storage are required (localhost or
 HTTPS on a supported desktop browser). There is no unattended recovery service.
 All tests use mocks; real wallet approval remains a manual acceptance step.
+
+## Phase 3 — backend verification, manual operator confirmation
+
+Steps 5 and 6 are restricted to the existing approved Job #3 payment. Start the
+loopback backend with `npm --prefix server start`, then run this frontend using
+the same Phase 2 browser origin/profile. Vite proxies only `/api/phase3` to
+`http://127.0.0.1:3001`. No signing credentials or environment files are required.
+
+**Verify payment** calls the backend's unchanged native-payment verifier using
+registry buyer/seller and canonical terms. It displays actual sender/recipient,
+wei, receipt status, each of the six checks, and observed registry state. It
+does not prompt a wallet or send a transaction. All backend readiness and state
+are refreshed on demand; browser storage is never verification authority.
+
+**Confirm payment on Fuji · prepare operator step** is a separate action. It
+rechecks the backend evidence and simulation, then shows a public terminal
+command for the authorized paymentConfirmer. The browser cannot sign or send
+it. Use the existing encrypted Foundry account, with its local password prompt;
+never enter a password or key in the UI/API. Run the read-only terminal preflight
+immediately before deciding whether to authorize the separate `cast send`.
+See [the complete operator acceptance procedure](../server/README.md#manual-acceptance-only-the-operator-sends).
+
+After sending manually, save/paste the confirmation hash and use **Refresh
+confirmation receipt & registry state**. Expect Created → Paid, a validated
+receipt/Snowtrace link, original payment hash as paymentRef, paidJobs +1, and
+unchanged successfulJobs/failedJobs. These live counters are shown in step 6;
+the historical dashboard and its existing explicit stats refresh are unchanged.
+No service execution or outcome is performed.
+
+`pos.phase3.operator.v1` stores only the handoff marker and public confirmation
+hash. Reload does not erase an uncertain attempt or offer another normal handoff.
+Receipt lookups and registry refreshes never send. If a handoff was started but
+instructions were lost to a reload/RPC error, the terminal preflight can recover
+public instructions; only proceed after manually ruling out an earlier send.
+An already-Paid job is recovered without preparing another call. Recent events
+can recover the hash automatically; older events require pasting the hash. A
+Paid read with unavailable receipt is labeled accordingly, not fabricated as a
+verified transition. Do not clear storage or resend after a timeout.
