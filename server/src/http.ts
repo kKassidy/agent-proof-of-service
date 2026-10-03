@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { callMockSeller, defaultMaxResponseTimeMs, evaluateSeller, policy, runDemo, sellers } from './service';
 import { handlePhase3, phase3Handler } from './phase3Http';
+import { handlePhase4, phase4Handler } from './phase4Http';
 
 async function readOptions(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -19,7 +20,7 @@ async function readOptions(request: IncomingMessage) {
   return { city, maxResponseTimeMs };
 }
 
-export function createApiServer(phase3 = phase3Handler) {
+export function createApiServer(phase3 = phase3Handler, phase4 = phase4Handler) {
   return createServer(async (request, response) => {
     const send = (status: number, body: unknown) => {
       response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -27,6 +28,8 @@ export function createApiServer(phase3 = phase3Handler) {
     };
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (request.method === 'POST') {
+      const phase4Route = /^\/api\/phase4\/(execute|prepare|refresh)$/.exec(url.pathname);
+      if (phase4Route) return handlePhase4(request, response, phase4Route[1] as 'execute' | 'prepare' | 'refresh', phase4);
       const phase3Route = /^\/api\/phase3\/(verify|prepare|refresh)$/.exec(url.pathname);
       if (phase3Route) return handlePhase3(request, response, phase3Route[1] as 'verify' | 'prepare' | 'refresh', phase3);
     }

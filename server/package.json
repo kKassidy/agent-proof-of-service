@@ -9,6 +9,7 @@
     "evidence:http": "tsx src/httpEvidence.ts",
     "evidence:payment": "tsx src/paymentEvidence.ts",
     "phase3:prepare": "tsx src/phase3Prepare.ts",
+    "phase4:prepare": "tsx src/phase4Prepare.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

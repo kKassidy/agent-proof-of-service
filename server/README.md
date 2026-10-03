@@ -134,6 +134,175 @@ changes, historical-evidence regeneration or canonical-hash changes are needed.
 
 ## API
 
+### Phase 4: frozen Job #3 service evidence and manual outcome
+
+**Real interactive Job #3 acceptance is complete on Fuji (43113).** Job #3 is
+Failure; use refresh only. Do not execute, prepare or send its outcome again.
+This run is separate from historical Job #1/#2 evidence, which remains unchanged.
+
+The accepted deterministic fault injection returned HTTP 200 with exact body
+`{"city":"Tokyo","condition":"clear"}` in **3.895435999846086 ms**.
+Schema/SLA validation returned FAILURE, 5/6 checks, with only
+`temperatureFiniteNumber` failing. The frozen resultHash is
+`0xc39f24e4a3efec42fe5cdd3ef8d33cfe0b2bb8fb91f99ca79bb90a59b43830cd`.
+The manual outcome transaction is
+`0xc3ea552cc628e211d7e658f984e3644b06cfbc83ce1205f11ea5594bd2cc9af0`.
+Receipt/event/readback verified Paid → Failure and counters **3 paid / 1
+successful / 2 failed**: only failedJobs incremented. The original paymentRef
+`0xfdbaf0372ba3b87e3d0ba77d25adac2af64c09c2d933f4584caecb1f94a143ca`
+remains unchanged. Frozen evidence stays local and gitignored; these public
+acceptance facts do not replace it or authorize reproduction of the run.
+
+HTTP 200 and payment proof do not establish successful service delivery.
+The contract records a trusted validator/operator's attestation; it does not
+execute HTTP or independently validate weather/schema/SLA evidence. This local
+fault-injection acceptance is not a claim of production readiness.
+
+Use this phase only after Job #3 is Paid. Do not repeat the earlier job creation,
+buyer payment or payment confirmation steps. Phase 4 adds three local endpoints:
+
+- `POST /api/phase4/refresh`: read the registry, verify the existing payment, load
+  frozen evidence, and recover a later outcome receipt. Never executes service.
+- `POST /api/phase4/execute`: explicitly request the one allowed measured HTTP
+  attempt, after canonical Paid-state checks and a durable exclusive claim.
+- `POST /api/phase4/prepare`: recheck registry/evidence and simulate a validator
+  call; return public unsigned calldata/operator instructions. Never broadcasts.
+
+The JSON body is `{"jobId":"3"}` with an optional public
+`outcomeTransactionHash`. No browser-supplied evidence, hash, timing, terms or
+signing credentials are accepted. JSON POSTs from another origin are rejected;
+the API remains bound to loopback, with no CORS or send endpoint. There is no
+service execution on page load or on a GET. This is a local operator demo, not
+a remotely authenticated service.
+
+The registry must report the canonical buyer, seller, Tokyo taskHash, original
+native paymentRef, Paid status, zero resultHash and zero completedAt. The
+unchanged native-payment verifier also checks that original payment. The job is
+reread after acquiring the execution claim, immediately before HTTP. Finalized
+jobs are recovered/displayed without another service request or prepared write.
+Independent chain activity can still race a read; this is not an on-chain lock.
+
+Execution uses unchanged `executeSellerHttp` against exactly
+`http://127.0.0.1:3001/api/sellers/seller-a/weather?city=Tokyo&scenario=failure`.
+This is the existing deterministic Seller A HTTP route, not `/api/demo`. Its
+response deliberately omits temperatureC; real elapsed time includes reading
+the complete raw HTTP body. `serviceEvidence(response, 1000)` reuses unchanged
+`validateSla`, canonicalization, and resultHash logic. `outcomeStatus` maps its
+result to the existing contract enum (`Failure = 3`). The planner itself, ABI,
+validator, task/result hash formats and historical Job #1/#2 evidence are unchanged.
+
+The approved response is exactly `{"city":"Tokyo","condition":"clear"}`.
+Preparation requires FAILURE with exactly temperatureFiniteNumber failing and
+the other five checks passing. This scenario guard is separate from the existing
+validator: the validator still checks only nonempty city, not city equality,
+and establishes neither factual weather truth nor production seller reliability.
+Actual timing must be strictly below 1000 ms. A slow/mismatched response is
+retained as observed and blocks preparation; it is never forced into 5/6.
+
+#### Frozen evidence and crash behavior
+
+The stable path is repository-root `.runtime/phase4-job3/`, independent of the
+server's working directory. `.gitignore` excludes it. Only public run data is
+stored; it is not a keystore. No directory is created by a plain refresh or by
+the preparation CLI when no attempt exists.
+
+Before HTTP, `attempt.json` is exclusively created and fsynced, including parent
+directory entries. Only its creator may execute. The complete observed response,
+validation, canonical string and resultHash are written exclusively to
+`evidence.pending.json` and fsynced; a hard link publishes `evidence.json`
+atomically without overwriting anything. The directory is then fsynced. Both
+evidence names remain; preserve the entire directory. Refresh revalidates the
+stored canonical string/hash using the existing functions, never a new HTTP call.
+
+An intent, a pending evidence file, or a published evidence file blocks another
+execution, including after restart. An incomplete/uncertain attempt remains
+blocked even if no response was captured. Partial, corrupt or inconsistent
+evidence blocks preparation. Unpublished pending data is not silently promoted.
+Do not delete/edit these files to retry. Stop for manual reconciliation after a
+crash, storage failure or unexpected scenario. Local disk is trusted operator
+storage, not an authenticated database: hash consistency cannot detect someone
+rewriting an entire valid evidence bundle. Losing/deleting all state removes
+local duplicate protection; do not treat that as authorization to rerun.
+
+Filesystem support for exclusive creation, hard links and file/directory fsync
+is required. There is no weaker persistence fallback. A storage failure can leave
+a blocked intent or pending evidence requiring manual inspection. The existing
+HTTP helper has no enforced transport deadline; a browser timeout does not
+cancel or authorize a repeat of an in-flight service request.
+
+#### Manual Job #3 browser acceptance and operator procedure
+
+The following records the completed acceptance procedure, not instructions to
+repeat it for finalized Job #3. For this job, refresh and inspect existing proof only.
+
+1. Start `npm --prefix server start` and `npm --prefix web run dev` in separate
+   terminals at the repository root, retaining the existing browser origin/profile.
+   Port 3001 must run this project's server. Do not revisit creation/payment
+   buttons. In step 7 click **Refresh Job #3 & frozen evidence**. Expect Paid,
+   unchanged paymentRef, zero registry resultHash and counters 3/1/1. If an
+   earlier attempt/evidence already exists, recover it instead of executing again.
+2. Click **Execute & validate · deterministic fault injection** exactly once.
+   It gates against Fuji state, durably claims the attempt, performs the measured
+   localhost HTTP GET, freezes the evidence, then rereads the registry. It sends
+   no blockchain transaction and does not prepare one automatically.
+3. Inspect HTTP 200, the exact raw body above, measured timing below 1000 ms,
+   FAILURE, and 5/6 checks with only temperatureC failing. Inspect the displayed
+   canonical string and the **new frozen Job #3 resultHash**. No fixed expected
+   resultHash is supplied: it binds this run's measured timing and cannot be
+   reproduced by assuming a later execution has identical timing. Refresh the
+   page and use step 7 Refresh; body, timing, canonical string and hash must be
+   unchanged, and Execute disabled. Registry must still be Paid with zero
+   resultHash. Any mismatch blocks preparation; do not rerun for a nicer result.
+4. Click step 8 **Prepare recordOutcome · local operator**. It validates the
+   same frozen evidence, rereads Paid state and the on-chain validator address,
+   then performs an `eth_call` simulation. No wallet or signer is invoked.
+5. Immediately before deciding whether to authorize, run the read/simulate-only
+   CLI from the same checkout:
+
+   ```sh
+   npm --prefix server run --silent phase4:prepare
+   ```
+
+   Require exit 0 and a non-null prepared call: Fuji 43113, fixed registry
+   `0x442EacAd079CcE0e3671ee0B2eb75c199f36e917`, job 3, outcome **3 (Failure)**,
+   zero AVAX value, and exactly the frozen hash inspected in step 7. Confirm
+   the on-chain validator public address matches your existing encrypted Foundry
+   account's public address. Check that there is no earlier/pending/uncertain
+   outcome submission; a still-Paid read alone cannot prove that.
+6. **Only you, during manual acceptance**, run the freshly returned
+   `prepared.command` once, substituting only your encrypted-account alias.
+   It calls `recordOutcome(uint256,uint8,bytes32)` with `(3, 3, frozenHash)`
+   and uses `--async` to return the public transaction hash promptly. Foundry
+   must prompt locally for the keystore password. No private-key, mnemonic,
+   password, password-file or unlocked-RPC flags; no secret in the browser,
+   API, arguments, environment files or logs. If your encrypted account cannot
+   be used without weakening this arrangement, stop. The application never
+   inspects, decrypts or provisions the account, and never starts Foundry.
+7. Save the public outcome transaction hash immediately, paste it into step 8,
+   and click **Refresh outcome receipt & registry**. Never repeat the send
+   because a hash or receipt is missing. Expected final state: Failure,
+   original paymentRef unchanged, resultHash equal to frozen evidence,
+   counters **3 paid / 1 successful / 2 failed**. The UI verifies the transaction,
+   authorized sender, exact calldata, successful receipt, OutcomeRecorded event,
+   Paid → Failure readback and counter delta. Stop at this final outcome.
+
+The browser stores only a separate `pos.phase4.operator.v1` handoff marker and
+public outcome hash. It cannot declare an outcome or replace server evidence.
+The marker survives refresh and blocks another normal handoff; known outcome
+hashes also block backend preparation while still Paid. Repeated preparation via
+the CLI only rereads/simulates the same frozen evidence, never sends. Manual
+terminal submissions remain the operator's responsibility across browsers/hosts.
+
+Recent event recovery scans at most 8,192 blocks in four 2,048-block ranges;
+paste the outcome hash for older receipts. A matching final registry state and
+an unavailable receipt are reported separately, with read-only retry. RPC trust,
+reorganizations and archival availability remain existing limitations. Counter
+deltas are block aggregates; unrelated activity may cause a reported mismatch.
+An unexpected Success state or missing/mismatched frozen evidence is displayed
+but cannot trigger execution, a replacement hash or another prepared outcome.
+
+### Existing mock routes
+
 - `GET /api/sellers`: seller metrics, fractional success rates, eligibility, and rejection reasons.
 - `GET /api/policy`: buyer requirements and default SLA threshold (1000 ms).
 - `POST /api/demo/success`: select seller and validate a normal response.

@@ -162,3 +162,56 @@ An already-Paid job is recovered without preparing another call. Recent events
 can recover the hash automatically; older events require pasting the hash. A
 Paid read with unavailable receipt is labeled accordingly, not fabricated as a
 verified transition. Do not clear storage or resend after a timeout.
+
+## Phase 4 — deterministic fault injection and frozen outcome evidence
+
+**Job #3 real Fuji acceptance is complete: Failure, counters 3/1/2.** Recover
+using refresh only; do not execute or record its outcome again. The [acceptance
+record](../server/README.md#phase-4-frozen-job-3-service-evidence-and-manual-outcome)
+documents its public resultHash and outcome transaction separately from unchanged
+historical Job #1/#2 evidence. The procedure below describes the completed flow.
+The validator/operator is trusted to attest the measured evidence; the contract
+does not validate HTTP itself. This demonstration makes no production-readiness claim.
+
+Steps 7 and 8 extend the existing flow for Paid Job #3. Start the same loopback
+server on port 3001; Vite proxies `/api/phase4` without exposing a signer.
+Use **Refresh Job #3 & frozen evidence** first. Nothing executes on page load.
+
+**Execute & validate · deterministic fault injection** explicitly requests the
+existing measured Seller A HTTP route in failure mode for Tokyo. The exact raw
+body is `{"city":"Tokyo","condition":"clear"}`: temperatureC is intentionally
+omitted. This demonstrates schema failure despite successful payment and HTTP
+200, not random/production seller unreliability. The existing validator still
+checks schema/timing only; it checks nonempty city, not requested-city equality,
+and does not verify factual weather truth.
+
+The backend freezes the raw response, measured timing, six checks, validation,
+canonical string and resultHash under ignored `.runtime/phase4-job3/`. A refresh
+must return the same evidence/hash, not another measurement. Only the expected
+5/6 FAILURE, with finite temperatureC as the sole failed check, may proceed.
+Slower-than-SLA or otherwise unexpected evidence is retained and blocks outcome
+preparation. An incomplete execution attempt also blocks reruns. Do not remove
+runtime files or clear browser storage to retry.
+
+**Prepare recordOutcome · local operator** is separate. It rechecks frozen
+evidence and Paid state and simulates the authorized validator call. The command
+uses the existing Failure enum (3), Job #3, and the actual frozen resultHash.
+It does not broadcast. Follow the [manual acceptance and operator procedure](../server/README.md#manual-job-3-browser-acceptance-and-operator-procedure),
+including a fresh `npm --prefix server run --silent phase4:prepare` immediately
+before your manual authorization. Enter the encrypted-account password only in
+Foundry's local prompt, never in this UI or API.
+
+Paste the resulting public outcome hash into step 8 and refresh. Expect
+**Paid → Failure**, unchanged paymentRef, the frozen resultHash, and counters
+**3 paid / 1 successful / 2 failed**. After verified receipt/readback, the UI shows:
+**Payment verified ✓ · HTTP 200 ✓ · Service requirements ✕ · Final outcome:
+FAILURE**, explicitly labeled deterministic fault injection, and
+**Payment ≠ Successful Delivery**.
+
+On reload, use step 7/8 refresh to recover final state before earlier-phase
+controls. Frozen server evidence is authoritative; the browser stores only a
+Phase 4 handoff marker and public outcome hash under `pos.phase4.operator.v1`.
+Timeouts never trigger automatic execution or transaction retries. Recent
+outcome events can recover the hash; older ones require pasting it. Finalized
+jobs cannot execute or prepare again. Runtime directory loss/corruption, RPC
+outages or uncertain terminal sends require reconciliation, not a new run.

@@ -10,7 +10,7 @@ const checkLabels = {
   sellerMatches: 'Recipient matches registry seller',
   amountSufficient: 'Value ≥ 1,000,000,000,000 wei',
 }
-export default function Phase3Panel({ onRegistryState }: { onRegistryState: (state: 'Created' | 'Paid') => void }) {
+export default function Phase3Panel({ onRegistryState, finalRegistryStatus }: { onRegistryState: (state: 'Created' | 'Paid') => void; finalRegistryStatus?: 'Success' | 'Failure' | undefined }) {
   const [operator, setOperator] = useState(() => readOperatorState(localStorage))
   const [hash, setHash] = useState(operator.hash)
   const [data, setData] = useState<Phase3Evidence>()
@@ -43,24 +43,25 @@ export default function Phase3Panel({ onRegistryState }: { onRegistryState: (sta
       <dl className="interactive-facts"><dt>Job ID</dt><dd>3 · approved acceptance run</dd>
         <dt>Existing native payment</dt><dd><a href={`${explorer}/tx/${phase3PaymentHash}`} target="_blank" rel="noreferrer">{phase3PaymentHash} ↗</a></dd>
         <dt>Expected minimum</dt><dd>0.000001 Fuji AVAX · 1,000,000,000,000 wei</dd></dl>
-      <button disabled={busy} onClick={() => void read('verify')}>Verify payment</button>
+      <button disabled={busy || !!finalRegistryStatus} onClick={() => void read('verify')}>Verify payment</button>
+      {finalRegistryStatus && <p>Job #3 is finalized: {finalRegistryStatus}. Steps 7 and 8 show the current payment verification and outcome evidence.</p>}
       {data && <div className="interactive-result">
         <p role="status">{data.verification.status === 'VERIFIED' ? 'Native payment verified ✓' : 'Native payment verification rejected'} · {Object.values(checks!).filter(Boolean).length}/6 payment checks</p>
         <dl className="interactive-facts"><dt>Actual sender</dt><dd>{data.evidence.transaction?.from ?? 'Unavailable'}</dd>
           <dt>Actual recipient</dt><dd>{data.evidence.transaction?.to ?? 'Unavailable'}</dd>
           <dt>Actual amount (wei)</dt><dd>{data.evidence.transaction?.valueWei ?? 'Unavailable'}</dd>
           <dt>Native receipt</dt><dd>{data.evidence.receipt?.status ?? 'Unavailable'}</dd>
-          <dt>Registry status</dt><dd>{data.registryStatus} · checked at Fuji block {data.observedBlock}</dd></dl>
+          <dt>Registry status at payment check</dt><dd>{data.registryStatus} · checked at Fuji block {data.observedBlock}</dd></dl>
         <ul>{Object.entries(checkLabels).map(([key, label]) => <li key={key}>{checks![key as keyof typeof checkLabels] ? '✓' : '✗'} {label}</li>)}</ul>
         <p>{data.readiness}</p>
       </div>}
     </li>
     <li><h3>6. Confirm payment on Fuji</h3>
       <p>Local operator approval is required. This button rechecks the backend evidence and prepares instructions; it does not sign or send. Use your existing encrypted Foundry account and its terminal password prompt.</p>
-      <p>Registry status: <strong>{data?.registryStatus ?? 'Not checked — verify or refresh'}</strong></p>
-      <button disabled={busy || !data?.confirmationReady || operator.handedOff} onClick={() => void read('prepare')}>Confirm payment on Fuji · prepare operator step</button>
+      <p>Registry status: <strong>{finalRegistryStatus ?? data?.registryStatus ?? 'Not checked — verify or refresh'}</strong></p>
+      <button disabled={busy || !!finalRegistryStatus || !data?.confirmationReady || operator.handedOff} onClick={() => void read('prepare')}>Confirm payment on Fuji · prepare operator step</button>
       {operator.handedOff && <p role="status">Operator handoff or submission recorded locally. Inspect terminal/wallet activity before any further action. A timeout or Created read is not proof that submission failed. Do not send again.</p>}
-      {data?.prepared && <div className="interactive-result">
+      {data?.prepared && !finalRegistryStatus && <div className="interactive-result">
         <p>Required paymentConfirmer: <strong>{data.prepared.from}</strong></p>
         <p>Immediately before authorizing, run <code>npm --prefix server run --silent phase3:prepare</code> in your terminal. Continue only with a fresh ready result and no previous/pending confirmation. Replace the account alias below with your existing encrypted account alias. Enter its password only in Foundry’s terminal prompt.</p>
         <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{data.prepared.command}</pre>
@@ -69,7 +70,7 @@ export default function Phase3Panel({ onRegistryState }: { onRegistryState: (sta
       <label>Confirmation transaction hash (public, optional for recent event recovery)
         <input value={hash} onChange={event => setHash(event.target.value.trim())} disabled={busy} placeholder="0x…" spellCheck={false} />
       </label>
-      <button disabled={busy} onClick={() => void read('refresh')}>Refresh confirmation receipt &amp; registry state</button>
+      <button disabled={busy || !!finalRegistryStatus} onClick={() => void read('refresh')}>Refresh confirmation receipt &amp; registry state</button>
       {operator.hash && <p>Saved confirmation transaction (receipt may still be pending): <a href={`${explorer}/tx/${operator.hash}`} target="_blank" rel="noreferrer">{operator.hash} ↗</a></p>}
       {data?.confirmationNotice && <p role="status">{data.confirmationNotice}</p>}
       {data && <div className="interactive-result">
