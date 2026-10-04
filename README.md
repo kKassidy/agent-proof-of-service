@@ -8,9 +8,9 @@ Agent reputation and feedback can be disconnected from actual paid interactions.
 
 Proof-of-Service binds a paid job, Avalanche payment evidence, service execution evidence, machine-verifiable schema/SLA validation, and an immutable **SUCCESS / FAILURE** outcome into a portable on-chain service history.
 
-This Buildathon MVP demonstrates that distinction with **two real paid jobs on Avalanche Fuji**. It is a service-evidence prototype, not a production-ready reputation platform.
+The primary interactive proof is **Job #3, completed on Avalanche Fuji**: real wallet payment, measured HTTP 200, 5/6 schema/SLA checks, and a recorded Failure outcome under deterministic fault injection. Refresh its existing proof; do not replay the finalized run. Historical Jobs #1/#2 remain supporting evidence. It is a service-evidence prototype, not a production-ready reputation platform.
 
-## The demo: both paid, both responded, only one passed
+## Historical supporting evidence: Jobs #1/#2
 
 Both jobs requested **Weather schema request · Tokyo** under the same task terms. Both used real localhost HTTP transport and real native Fuji AVAX payments.
 
@@ -75,7 +75,7 @@ The implemented [`E2EPlanner`](server/src/orchestration.ts) prepares unsigned ca
 Explicit limitations:
 
 - Weather content is deterministic demo data, not verified real-world weather.
-- Buyer and trusted verifier share a signer in this hackathon MVP; validation is not decentralized.
+- Historical Jobs #1/#2 shared a buyer/verifier signer. Interactive Job #3 used a buyer wallet and trusted local operator roles; validation remains off-chain and is not decentralized.
 - No Sybil-resistance claim and no arbitrary trust score.
 - No x402 or ERC-8004 integration in the MVP.
 - This is a hackathon prototype, not a production-ready system.

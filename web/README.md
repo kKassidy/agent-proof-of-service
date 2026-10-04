@@ -215,3 +215,21 @@ Timeouts never trigger automatic execution or transaction retries. Recent
 outcome events can recover the hash; older ones require pasting it. Finalized
 jobs cannot execute or prepare again. Runtime directory loss/corruption, RPC
 outages or uncertain terminal sends require reconciliation, not a new run.
+
+## Judge-facing completed proof
+
+Job #3 is the primary proof. The page distinguishes recorded acceptance from
+current verification: use **Refresh verified Job #3 evidence** for the existing
+read-only recovery path. It never replays execution or sends a transaction.
+Four milestones summarize the original eight steps without replacing their
+handlers: Buyer Action (1–4), Payment Proof (5–6), Service Evidence (7), and
+Outcome Proof (8). After complete verified recovery, the original workflow is
+collapsed but remains accessible. Unchecked, uncertain or mismatched states keep
+the workflow and recovery notices open. Historical Jobs #1/#2 and illustrative
+selection fixtures are explicitly separate from the primary proof and live totals.
+
+Run all frontend tests, including JSX presentation tests, from the repository root:
+
+```sh
+server/node_modules/.bin/tsx --tsconfig web/tsconfig.app.json --test web/test/*.test.ts
+```

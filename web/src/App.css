@@ -904,3 +904,18 @@ footer {
 .interactive-result { margin-top:18px; padding-top:14px; border-top:1px solid #304051; overflow-wrap:anywhere; }
 .interactive-error { color:#ffb6a5; }
 @media(max-width:760px) { .interactive-facts { grid-template-columns:1fr; gap:6px; } .interactive-facts dd { margin-bottom:10px; } }
+
+/* Completed proof presentation; execution and recovery controls remain intact. */
+.journey { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; list-style:none; padding:0; margin:24px 0; }
+.journey li { border:1px solid #304051; border-radius:8px; padding:16px; display:grid; gap:8px; }
+.journey span, .journey small { color:#b5c3d5; font-size:12px; }
+.job-proof { border:1px solid #3b816f; border-radius:10px; padding:24px; margin:20px 0; background:#122321; }
+.proof-verdict { display:flex; flex-wrap:wrap; gap:14px; color:#85e8c9; }
+.service-failure { color:#ffb6a5; }
+.interactive .proof-refresh { background:#79e6c3; color:#10231d; font-weight:750; }
+.interactive summary { cursor:pointer; padding:12px 0; font-weight:650; }
+.interactive details { min-width:0; }
+.interactive input { max-width:100%; background:#0b121c; color:#e7ecf4; border:1px solid #40516a; padding:10px; border-radius:5px; }
+.interactive summary:focus-visible, .interactive input:focus-visible { outline:2px solid #71e4c2; outline-offset:4px; }
+@media(max-width:760px) { .journey { grid-template-columns:1fr 1fr; } .job-proof { padding:18px; } }
+@media(max-width:380px) { .journey { grid-template-columns:1fr; } }

@@ -5,7 +5,8 @@ import { decodeCreatedJob, discoverWallets, evaluatePolicy, fujiBalance, fujiCli
 
 import { readRun, saveRun, storageKey, validateJobForPayment, requestPayment, checkPayment, paymentBlocked, paymentMessage, type Run } from './payment'
 import Phase3Panel from './Phase3Panel'
-import Phase4Panel from './Phase4Panel'
+import Phase4Panel, { Job3Proof } from './Phase4Panel'
+import type { Phase4Evidence } from './phase4'
 
 function InteractivePanel() {
   const [wallets, setWallets] = useState<Wallet[]>([])
@@ -19,6 +20,8 @@ function InteractivePanel() {
   const [jobReady, setJobReady] = useState(false)
   const [paymentChecked, setPaymentChecked] = useState(false)
   const [phase3State, setPhase3State] = useState<'Created' | 'Paid'>()
+  const [proof, setProof] = useState<Phase4Evidence>()
+  const refreshProof = useRef<HTMLButtonElement>(null)
   const [phase4State, setPhase4State] = useState<'Paid' | 'Success' | 'Failure'>()
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
@@ -94,10 +97,22 @@ function InteractivePanel() {
     setJobReady(false)
     setMessage('Creation receipt validated. Check the registry job before paying Seller A.')
   }
+  const completedProof = proof?.registryStatus === 'Failure' && proof.paymentVerified && proof.expectedFault && !!proof.frozen && !!proof.outcomeProof && proof.outcomeProof.countersMatchExpectedDelta
   const boundToOtherAccount = run && account?.toLowerCase() !== run.buyer.toLowerCase()
   return <section className="section interactive" id="try-fuji">
-    <div className="section-heading"><div><p className="eyebrow">TRY IT ON FUJI</p><h2>Create your own Proof-of-Service job.</h2></div><span className="badge neutral">Phase 4 · Service evidence &amp; outcome</span></div>
-    <p className="section-intro">Create a job, then explicitly approve a native Fuji AVAX payment. Native payment and registry payment confirmation are separate steps.</p>
+    <div className="section-heading"><div><p className="eyebrow">VERIFIED FUJI RUN</p><h2>Job #3 · Completed on Avalanche Fuji</h2></div><span className="badge neutral">Completed acceptance run</span></div>
+    <p className="section-intro">Real wallet payment. Measured HTTP response. Recorded service failure.</p>
+    <p>Recorded acceptance is complete. Refresh to verify current Fuji state and frozen evidence; no wallet connection is required to inspect this run.</p>
+    <button className="proof-refresh" onClick={() => refreshProof.current?.click()}>Refresh verified Job #3 evidence</button>
+    <Job3Proof data={proof} />
+    <ol className="journey" aria-label="Proof journey">
+      <li><strong>Buyer Action</strong><span>Connect → Evaluate → Create → Pay</span><small>Steps 1–4 · buyer wallet</small></li>
+      <li><strong>Payment Proof</strong><span>Verify → Authorized Confirmation</span><small>Steps 5–6 · backend + trusted operator</small></li>
+      <li><strong>Service Evidence</strong><span>Execute → Validate</span><small>Step 7 · measured HTTP</small></li>
+      <li><strong>Outcome Proof</strong><span>Authorized Recording → Fuji Readback</span><small>Step 8 · trusted operator + registry</small></li>
+    </ol>
+    <p>Trusted local operators authorize registry writes. Service validation runs off-chain; payment proof and service outcome are separate evidence.</p>
+    <details open={!completedProof}><summary>Original workflow · wallet, operator and recovery details</summary>
     <ol className="interactive-steps">
       <li><h3>1. Connect wallet</h3>
         {wallets.length ? <label>Desktop wallet <select value={wallet?.id ?? ''} disabled={busy} onChange={e => { setSelected(e.target.value); setAccount(undefined); setChain(undefined); setBalance('—') }}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label> : <p>No injected wallet detected. Install or enable MetaMask or Core, then reload. You can still explore the dashboard.</p>}
@@ -176,9 +191,10 @@ function InteractivePanel() {
         </div>}
       </li>
       <Phase3Panel onRegistryState={setPhase3State} finalRegistryStatus={phase4State === 'Success' || phase4State === 'Failure' ? phase4State : undefined} />
-      <Phase4Panel onRegistryState={state => { setPhase4State(state); setPhase3State('Paid') }} />
+      <Phase4Panel refreshRef={refreshProof} onEvidence={setProof} onRegistryState={state => { setPhase4State(state); setPhase3State('Paid') }} />
     </ol>
-    <p role="status" aria-live="polite">{busy ? 'Working… ' : ''}{message}</p>{error && <p className="interactive-error" role="alert">{error}</p>}
+    </details>
+    <p role="status" aria-live="polite">{busy ? 'Working… ' : ''}{proof?.outcomeProof ? 'Completed — this finalized proof run cannot be executed or recorded again.' : message}</p>{error && <p className="interactive-error" role="alert">{error}</p>}
   </section>
 }
 export default class InteractiveDemo extends Component<object, { failed: boolean }> {
