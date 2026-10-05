@@ -7,6 +7,10 @@ import { readRun, saveRun, storageKey, validateJobForPayment, requestPayment, ch
 import Phase3Panel from './Phase3Panel'
 import Phase4Panel, { Job3Proof } from './Phase4Panel'
 import type { Phase4Evidence } from './phase4'
+import { PUBLIC_DEMO } from './publicDemo'
+import { PUBLIC_JOB3_EVIDENCE } from './publicJob3Evidence'
+import { phase3ConfirmationHash, phase3CreationHash, phase3PaymentHash } from './phase3'
+import { readJob3Proof, type Job3Readback } from './fuji'
 
 function InteractivePanel() {
   const [wallets, setWallets] = useState<Wallet[]>([])
@@ -20,7 +24,18 @@ function InteractivePanel() {
   const [jobReady, setJobReady] = useState(false)
   const [paymentChecked, setPaymentChecked] = useState(false)
   const [phase3State, setPhase3State] = useState<'Created' | 'Paid'>()
-  const [proof, setProof] = useState<Phase4Evidence>()
+  const [proof, setProof] = useState<Phase4Evidence | undefined>(PUBLIC_DEMO ? PUBLIC_JOB3_EVIDENCE : undefined)
+  const [fujiReadback, setFujiReadback] = useState<Job3Readback>()
+  const [fujiReadbackError, setFujiReadbackError] = useState('')
+  const refreshFujiReadback = async () => {
+    setFujiReadbackError('')
+    try {
+      setFujiReadback(await readJob3Proof())
+    } catch (cause) {
+      setFujiReadback(undefined)
+      setFujiReadbackError(cause instanceof Error ? cause.message : 'Fuji readback failed.')
+    }
+  }
   const refreshProof = useRef<HTMLButtonElement>(null)
   const [phase4State, setPhase4State] = useState<'Paid' | 'Success' | 'Failure'>()
   const [busy, setBusy] = useState(false)
@@ -102,8 +117,36 @@ function InteractivePanel() {
   return <section className="section interactive" id="try-fuji">
     <div className="section-heading"><div><p className="eyebrow">VERIFIED FUJI RUN</p><h2>Job #3 · Completed on Avalanche Fuji</h2></div><span className="badge neutral">Completed acceptance run</span></div>
     <p className="section-intro">Real wallet payment. Measured HTTP response. Recorded service failure.</p>
-    <p>Recorded acceptance is complete. Refresh to verify current Fuji state and frozen evidence; no wallet connection is required to inspect this run.</p>
-    <button className="proof-refresh" onClick={() => refreshProof.current?.click()}>Refresh verified Job #3 evidence</button>
+    <p>
+      {PUBLIC_DEMO
+        ? 'Frozen acceptance evidence is shown below. Refresh Fuji readback to independently verify the current on-chain Job #3 state; the HTTP service is not replayed.'
+        : 'Recorded acceptance is complete. Refresh to verify current Fuji state and frozen evidence; no wallet connection is required to inspect this run.'}
+    </p>
+    {PUBLIC_DEMO ? (
+      <div className="fuji-readback">
+        <button className="proof-refresh" onClick={refreshFujiReadback}>
+          Refresh Fuji readback
+        </button>
+        {fujiReadback && (
+          <p role="status">
+            <strong>Live Fuji readback ✓</strong>
+            {' · '}Job #3: {fujiReadback.status}
+            {' · '}paymentRef matched
+            {' · '}resultHash matched
+            {' · '}Current seller history: {fujiReadback.paid.toString()} paid / {fujiReadback.success.toString()} successful / {fujiReadback.failed.toString()} failed
+          </p>
+        )}
+        {fujiReadbackError && (
+          <p role="alert">
+            Fuji readback unavailable: {fujiReadbackError}
+          </p>
+        )}
+      </div>
+    ) : (
+      <button className="proof-refresh" onClick={() => refreshProof.current?.click()}>
+        Refresh verified Job #3 evidence
+      </button>
+    )}
     <Job3Proof data={proof} />
     <ol className="journey" aria-label="Proof journey">
       <li><strong>Buyer Action</strong><span>Connect → Evaluate → Create → Pay</span><small>Steps 1–4 · buyer wallet</small></li>
@@ -112,7 +155,119 @@ function InteractivePanel() {
       <li><strong>Outcome Proof</strong><span>Authorized Recording → Fuji Readback</span><small>Step 8 · trusted operator + registry</small></li>
     </ol>
     <p>Trusted local operators authorize registry writes. Service validation runs off-chain; payment proof and service outcome are separate evidence.</p>
-    <details open={!completedProof}><summary>Original workflow · wallet, operator and recovery details</summary>
+    {PUBLIC_DEMO && <details className="completed-workflow">
+      <summary>Explore the completed Job #3 workflow</summary>
+      <p className="section-note">Replay the completed acceptance path without sending a transaction or replaying the HTTP service.</p>
+      <ol className="interactive-steps">
+        <li>
+          <h3>1. Buyer</h3>
+          <p className="eyebrow">COMPLETED BUYER ACTION</p>
+          <dl className="interactive-facts">
+            <dt>Buyer</dt><dd>0x51b682f07424b124992C0a42600dCa15c4383aFE</dd>
+            <dt>Network</dt><dd>Avalanche Fuji · 43113</dd>
+            <dt>Mode</dt><dd>Completed run · read-only replay</dd>
+          </dl>
+        </li>
+
+        <li>
+          <h3>2. Evaluate seller</h3>
+          <p className="eyebrow">ILLUSTRATIVE PRE-PURCHASE HISTORY</p>
+          <p>Buyer policy: ≥{policy.minimumVerifiedJobs} verified jobs · ≥{policy.minimumSuccessRate * 100}% success · ≤${policy.maximumPriceUsd.toFixed(2)} illustrative price.</p>
+          <button onClick={() => setEvaluation(evaluatePolicy())}>Evaluate buyer policy</button>
+          {evaluation && (() => {
+            const selectedSeller = evaluation.find(item => item.eligible)
+            return selectedSeller ? <div className="interactive-result">
+              <p><strong>{selectedSeller.seller.name} selected ✓</strong></p>
+              <p>{selectedSeller.seller.verifiedJobs} illustrative jobs · {(selectedSeller.successRate! * 100).toFixed(1)}% success · ${selectedSeller.seller.priceUsd}/request</p>
+              <p>Meets all buyer policy requirements.</p>
+              <p className="section-note">Seller B/C rejected · see the detailed illustrative comparison below ↓</p>
+            </div> : <p role="status">No seller meets the buyer policy.</p>
+          })()}
+          <p className="section-note">Illustrative fixture only · not registry reputation. Real Fuji seller history is shown separately below.</p>
+        </li>
+
+        <li>
+          <h3>3. Job created <span aria-label="completed">✓</span></h3>
+          <p className="eyebrow">REAL AVALANCHE FUJI PROOF</p>
+          <dl className="interactive-facts">
+            <dt>Job ID</dt><dd>3</dd>
+            <dt>Seller A</dt><dd>{seller}</dd>
+            <dt>taskHash</dt><dd>{taskHash}</dd>
+          </dl>
+          <p><a href={`${explorer}/tx/${phase3CreationHash}`} target="_blank" rel="noreferrer">Inspect creation transaction ↗</a></p>
+        </li>
+
+        <li>
+          <h3>4. Native payment <span aria-label="completed">✓</span></h3>
+          <p className="eyebrow">REAL FUJI AVAX TRANSFER</p>
+          <dl className="interactive-facts">
+            <dt>Amount</dt><dd>0.000001 Fuji AVAX · 1,000,000,000,000 wei</dd>
+            <dt>From</dt><dd>0x51b682f07424b124992C0a42600dCa15c4383aFE</dd>
+            <dt>To / Seller A</dt><dd>{seller}</dd>
+          </dl>
+          <p><a href={`${explorer}/tx/${phase3PaymentHash}`} target="_blank" rel="noreferrer">Inspect native payment ↗</a></p>
+          <p className="section-note">The native transfer proves payment, not successful delivery.</p>
+        </li>
+
+        <li>
+          <h3>5. Payment verified <span aria-label="verified">✓</span></h3>
+          <p className="eyebrow">OFF-CHAIN VERIFICATION · COMPLETED ACCEPTANCE RUN</p>
+          <p><strong>6/6 payment checks passed.</strong> The existing Fuji transaction and receipt were checked against the approved Job #3 terms.</p>
+          <ul>
+            <li>✓ RPC and transaction chain: Fuji 43113</li>
+            <li>✓ Requested transaction, receipt and mined block agree</li>
+            <li>✓ Native payment receipt succeeded</li>
+            <li>✓ Sender matches registry buyer</li>
+            <li>✓ Recipient matches registry seller</li>
+            <li>✓ Value ≥ 1,000,000,000,000 wei</li>
+          </ul>
+          <p className="section-note">Verification is off-chain. Passing these checks proves the approved payment evidence, not service delivery.</p>
+        </li>
+
+        <li>
+          <h3>6. Payment confirmed <span aria-label="completed">✓</span></h3>
+          <p className="eyebrow">AUTHORIZED FUJI REGISTRY TRANSITION</p>
+          <p><strong>Created → Paid</strong> · the authorized payment confirmer recorded the existing paymentRef.</p>
+          <dl className="interactive-facts">
+            <dt>paymentRef</dt><dd>{phase3PaymentHash}</dd>
+            <dt>Registry transition</dt><dd>Created → Paid</dd>
+            <dt>Service outcome</dt><dd>Not recorded by payment confirmation</dd>
+          </dl>
+          <p><a href={`${explorer}/tx/${phase3ConfirmationHash}`} target="_blank" rel="noreferrer">Inspect payment confirmation transaction ↗</a></p>
+        </li>
+
+        <li>
+          <h3>7. Service requirements <span className="service-failure" aria-label="failed requirement">✕</span></h3>
+          <p className="eyebrow">DETERMINISTIC FAULT INJECTION · FROZEN EVIDENCE</p>
+          <p>Seller A returned HTTP 200, but the response intentionally omitted <code>temperatureC</code>.</p>
+          <dl className="interactive-facts">
+            <dt>HTTP status</dt><dd>{PUBLIC_JOB3_EVIDENCE.frozen?.response.status}</dd>
+            <dt>Measured response</dt><dd>{PUBLIC_JOB3_EVIDENCE.frozen?.response.responseTimeMs} ms</dd>
+            <dt>Validation</dt><dd>Completed · 5/6 · FAILURE</dd>
+            <dt>Raw response</dt><dd><code>{PUBLIC_JOB3_EVIDENCE.frozen?.response.body}</code></dd>
+          </dl>
+          <ul>
+            {PUBLIC_JOB3_EVIDENCE.frozen?.validation.checks.map(check => <li key={check.id}>{check.passed ? '✓' : '✕'} {check.id === 'httpStatus200' ? 'HTTP status = 200' : check.id === 'validJson' ? 'Valid JSON' : check.id === 'cityNonEmptyString' ? 'Nonempty city' : check.id === 'temperatureFiniteNumber' ? 'Finite temperatureC' : check.id === 'conditionNonEmptyString' ? 'Nonempty condition' : 'Measured response time < 1000 ms'}</li>)}
+          </ul>
+          <p className="section-note">Schema/SLA validation only. It does not establish factual weather truth or require returned-city equality.</p>
+        </li>
+
+        <li>
+          <h3>8. Failure recorded on Fuji <span aria-label="completed">✓</span></h3>
+          <p className="eyebrow">FINAL OUTCOME PROOF</p>
+          <p><strong>Paid → Failure</strong> · receipt, outcome event, frozen resultHash and registry readback were verified.</p>
+          <dl className="interactive-facts">
+            <dt>Final status</dt><dd>Failure</dd>
+            <dt>resultHash</dt><dd>{PUBLIC_JOB3_EVIDENCE.resultHash}</dd>
+            <dt>Seller history after outcome</dt><dd>{PUBLIC_JOB3_EVIDENCE.sellerStats.paidJobs} paid / {PUBLIC_JOB3_EVIDENCE.sellerStats.successfulJobs} successful / {PUBLIC_JOB3_EVIDENCE.sellerStats.failedJobs} failed</dd>
+          </dl>
+          {PUBLIC_JOB3_EVIDENCE.outcomeProof && <p><a href={`${explorer}/tx/${PUBLIC_JOB3_EVIDENCE.outcomeProof.transactionHash}`} target="_blank" rel="noreferrer">Inspect Failure outcome transaction ↗</a></p>}
+          <p><strong>Payment verified ✓ · Service requirements ✕ · Failure recorded ✓</strong></p>
+          <p className="section-note">Use “Refresh Fuji readback” above to independently check the current Job #3 status, paymentRef, resultHash and seller totals.</p>
+        </li>
+      </ol>
+    </details>}
+    {!PUBLIC_DEMO && <details open={!completedProof}><summary>Original workflow · wallet, operator and recovery details</summary>
     <ol className="interactive-steps">
       <li><h3>1. Connect wallet</h3>
         {wallets.length ? <label>Desktop wallet <select value={wallet?.id ?? ''} disabled={busy} onChange={e => { setSelected(e.target.value); setAccount(undefined); setChain(undefined); setBalance('—') }}>{wallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label> : <p>No injected wallet detected. Install or enable MetaMask or Core, then reload. You can still explore the dashboard.</p>}
@@ -193,8 +348,9 @@ function InteractivePanel() {
       <Phase3Panel onRegistryState={setPhase3State} finalRegistryStatus={phase4State === 'Success' || phase4State === 'Failure' ? phase4State : undefined} />
       <Phase4Panel refreshRef={refreshProof} onEvidence={setProof} onRegistryState={state => { setPhase4State(state); setPhase3State('Paid') }} />
     </ol>
-    </details>
-    <p role="status" aria-live="polite">{busy ? 'Working… ' : ''}{proof?.outcomeProof ? 'Completed — this finalized proof run cannot be executed or recorded again.' : message}</p>{error && <p className="interactive-error" role="alert">{error}</p>}
+    </details>}
+    {!PUBLIC_DEMO && <p role="status" aria-live="polite">{busy ? 'Working… ' : ''}{proof?.outcomeProof ? 'Completed — this finalized proof run cannot be executed or recorded again.' : message}</p>}
+    {error && <p className="interactive-error" role="alert">{error}</p>}
   </section>
 }
 export default class InteractiveDemo extends Component<object, { failed: boolean }> {

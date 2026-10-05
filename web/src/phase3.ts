@@ -1,7 +1,9 @@
 import type { Phase3Action, Phase3Evidence } from '../../server/src/phase3Types'
 
 export type { Phase3Evidence }
+export const phase3CreationHash = '0x1b5b66be3f86e550556dda29b952fa95d3babedb11f8600b9da7f05f247399b0'
 export const phase3PaymentHash = '0xfdbaf0372ba3b87e3d0ba77d25adac2af64c09c2d933f4584caecb1f94a143ca'
+export const phase3ConfirmationHash = '0x0ce71e92b43bbfbea3252cd422d00f58bf5867b7afa5003fe817cb236eb12a77'
 export const phase3StorageKey = 'pos.phase3.operator.v1'
 export type OperatorState = { handedOff: boolean; hash: string }
 export const isTransactionHash = (hash: string) => /^0x[\da-fA-F]{64}$/.test(hash) && !/^0x0{64}$/.test(hash)

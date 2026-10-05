@@ -27,3 +27,55 @@ export async function readSellerStats(signal: AbortSignal): Promise<Stats> {
   if (success + failed > paid) throw new Error('Inconsistent registry counters')
   return { paid, success, failed }
 }
+
+import { registryAbi } from '../../server/src/registryAbi'
+import { fujiClient, FUJI_CHAIN_ID } from './wallet'
+
+export type Job3Readback = {
+  status: 'Failure'
+  paymentRef: `0x${string}`
+  resultHash: `0x${string}`
+  paid: bigint
+  success: bigint
+  failed: bigint
+}
+
+export async function readJob3Proof(): Promise<Job3Readback> {
+  const client = fujiClient()
+  if (await client.getChainId() !== FUJI_CHAIN_ID) throw new Error('RPC is not Avalanche Fuji.')
+
+  const [job, stats] = await Promise.all([
+    client.readContract({
+      address: registry,
+      abi: registryAbi,
+      functionName: 'getJob',
+      args: [3n],
+    }),
+    client.readContract({
+      address: registry,
+      abi: registryAbi,
+      functionName: 'sellerStats',
+      args: [seller],
+    }),
+  ])
+
+  const expectedPaymentRef = '0xfdbaf0372ba3b87e3d0ba77d25adac2af64c09c2d933f4584caecb1f94a143ca'
+  const expectedResultHash = '0xc39f24e4a3efec42fe5cdd3ef8d33cfe0b2bb8fb91f99ca79bb90a59b43830cd'
+
+  if (job.seller.toLowerCase() !== seller.toLowerCase()) throw new Error('Job #3 seller mismatch.')
+  if (job.status !== 3) throw new Error('Job #3 is not recorded as Failure.')
+  if (job.paymentRef.toLowerCase() !== expectedPaymentRef) throw new Error('Job #3 paymentRef mismatch.')
+  if (job.resultHash.toLowerCase() !== expectedResultHash) throw new Error('Job #3 resultHash mismatch.')
+
+  const [paid, success, failed] = stats
+  if (success + failed > paid) throw new Error('Inconsistent registry counters.')
+
+  return {
+    status: 'Failure',
+    paymentRef: job.paymentRef,
+    resultHash: job.resultHash,
+    paid,
+    success,
+    failed,
+  }
+}

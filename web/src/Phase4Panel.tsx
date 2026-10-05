@@ -117,7 +117,7 @@ export function Job3Proof({ data }: { data?: Phase4Evidence }) {
     <p>Paid → Failure · receipt, outcome event and frozen resultHash match verified.</p>
     <p>Seller history: {data.sellerStats.paidJobs} paid / {data.sellerStats.successfulJobs} successful / {data.sellerStats.failedJobs} failed.</p>
     <p><a href={`${explorer}/tx/${data.paymentRef}`} target="_blank" rel="noreferrer">Inspect buyer payment ↗</a> · <a href={`${explorer}/tx/${data.outcomeProof!.transactionHash}`} target="_blank" rel="noreferrer">Inspect Failure outcome transaction ↗</a></p>
-    <p>Read from Fuji at block {data.observedBlock}. Completed by authorized operator; validation remains off-chain.</p>
+    <p>Fuji readback captured at block {data.observedBlock}. Completed by authorized operator; validation remains off-chain.</p>
     {!data.outcomeProof!.countersMatchExpectedDelta && <p role="alert">Counter changes include other activity; inspect the outcome block before attributing a delta.</p>}
     <details><summary>Full frozen evidence and registry references</summary><dl className="interactive-facts"><dt>paymentRef</dt><dd>{data.paymentRef}</dd><dt>resultHash</dt><dd>{data.resultHash}</dd></dl><pre>{frozen.canonical}</pre>
     <ul>{frozen.validation.checks.map(check => <li key={check.id}>{check.passed ? '✓' : '✕'} {labels[check.id]}</li>)}</ul></details>
